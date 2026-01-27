@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Jogo da Velholoca</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+:root { --pink:#FF2F92; }
+
+* { box-sizing:border-box; font-family:Arial,sans-serif; }
+
+body{
+  margin:0;
+  background:#000;
+  color:#fff;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  min-height:100vh;
+}
+
+.container{
+  width:100%;
+  max-width:360px;
+  padding:15px;
+  text-align:center;
+}
+
+h1{ color:var(--pink); }
+
+.modo button,.novo-jogo,select{
+  width:100%;
+  padding:10px;
+  margin:6px 0;
+  background:transparent;
+  border:2px solid var(--pink);
+  color:#fff;
+  font-size:16px;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+.modo button:hover,.novo-jogo:hover,select:hover{
+  background:var(--pink);
+}
+
+.placar{
+  display:flex;
+  justify-content:space-between;
+  margin:10px 0;
+  font-size:14px;
+}
+
+.tabuleiro{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+  margin:15px 0;
+}
+
+.celula{
+  background:#111;
+  border:2px solid var(--pink);
+  height:90px;
+  font-size:48px;
+  color:#fff;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  cursor:pointer;
+}
+
+/* animação jogada decisiva */
+.celula.win {
+  animation: blink .6s ease-in-out 3;
+}
+
+@keyframes blink {
+  50% { background:var(--pink); color:#000; }
+}
+
+.msg{ min-height:24px; margin-top:10px; }
+
+@keyframes playerWin{
+  50%{ box-shadow:0 0 30px rgba(255,47,146,.9); transform:scale(1.08); }
+}
+.player-win{ animation:playerWin 1.2s ease-in-out; }
+
+@keyframes muWin{
+  40%{ box-shadow:0 0 40px rgba(255,0,80,1); transform:scale(1.1) rotate(1deg); }
+}
+.mu-win{ animation:muWin 1s ease-in-out 2; }
+</style>
+</head>
+
+<body>
+<div class="container">
+<h1>🤪 Jogo da Velholoca</h1>
+
+<div class="modo">
+  <button onclick="setModo('pvp')">👥 2 Jogadores</button>
+  <button onclick="setModo('bot')">🐮 Contra a Mu</button>
+</div>
+
+<select id="nivel">
+  <option value="facil">😴 Fácil</option>
+  <option value="medio" selected>😏 Médio</option>
+  <option value="hard">😈 Impossível</option>
+</select>
+
+<div class="placar">
+  <div>Você: <span id="px">0</span></div>
+  <div>Empate: <span id="pe">0</span></div>
+  <div>Mu: <span id="po">0</span></div>
+</div>
+
+<div class="tabuleiro"></div>
+
+<button class="novo-jogo" onclick="novoJogo()">🔄 Novo Jogo</button>
+
+<div class="msg" id="msg"></div>
+</div>
+
+<script>
+let board=Array(9).fill("");
+let currentPlayer="X";
+let modo="pvp";
+
+let score=JSON.parse(localStorage.getItem("placar"))||{X:0,O:0,E:0};
+let ranking=JSON.parse(localStorage.getItem("ranking"))||{player:0,mu:0};
+
+const tabuleiro=document.querySelector(".tabuleiro");
+const msg=document.getElementById("msg");
+const nivel=document.getElementById("nivel");
+
+const provocacoes=[
+ "🐮 Muuuu! Te ganhei!",
+ "😎 Haha a vaquinha venceu!",
+ "🐄 Volta pro pasto!",
+ "😂 Nem doeu!"
+];
+
+const wins=[
+ [0,1,2],[3,4,5],[6,7,8],
+ [0,3,6],[1,4,7],[2,5,8],
+ [0,4,8],[2,4,6]
+];
+
+const cells=[];
+
+function criarTabuleiro(){
+ tabuleiro.innerHTML="";
+ cells.length=0;
+ for(let i=0;i<9;i++){
+  const d=document.createElement("div");
+  d.className="celula";
+  d.onclick=()=>clickCell(i);
+  tabuleiro.appendChild(d);
+  cells.push(d);
+ }
+}
+criarTabuleiro(); updatePlacar();
+
+function setModo(m){ modo=m; novoJogo(); }
+
+function clickCell(i){
+ if(board[i]||msg.textContent)return;
+ playMove(i);
+ if(modo==="bot"&&currentPlayer==="O"&&!msg.textContent){
+  setTimeout(botMove,600+Math.random()*600);
+ }
+}
+
+function playMove(i){
+ board[i]=currentPlayer;
+ cells[i].textContent=currentPlayer;
+
+ if(checkWinner(i)){
+  if(modo==="bot"){
+   if(currentPlayer==="X"){
+    score.X++; ranking.player++;
+    showMsg("🎉 Finalmente você ganhou!","player");
+   }else{
+    score.O++; ranking.mu++;
+    showMsg(provocacoes[Math.floor(Math.random()*provocacoes.length)],"mu");
+   }
+  }else{
+   score[currentPlayer]++;
+   showMsg(`🏆 Jogador ${currentPlayer} venceu!`,"player");
+  }
+  save(); updatePlacar();
+  return;
+ }
+
+ if(board.every(c=>c)){
+  score.E++; save(); updatePlacar();
+  showMsg("👵🏻 Deu velhoca!");
+  return;
+ }
+
+ currentPlayer=currentPlayer==="X"?"O":"X";
+}
+
+function botMove(){
+ let empty=board.map((v,i)=>v?null:i).filter(v=>v!==null);
+
+ if(nivel.value==="facil"){
+  playMove(empty[Math.floor(Math.random()*empty.length)]);
+  return;
+ }
+
+ if(nivel.value==="medio" && Math.random()<0.4){
+  playMove(empty[Math.floor(Math.random()*empty.length)]);
+  return;
+ }
+
+ let best=-Infinity,move=null;
+ for(let i of empty){
+  board[i]="O";
+  let score=minimax(board,0,false);
+  board[i]="";
+  if(score>best){best=score;move=i;}
+ }
+ playMove(move);
+}
+
+function minimax(b,d,max){
+ let r=checkResult();
+ if(r!==null)return r==="O"?5-d:r==="X"?d-5:0;
+
+ if(max){
+  let best=-Infinity;
+  for(let i=0;i<9;i++)if(b[i]===""){
+   b[i]="O";
+   best=Math.max(best,minimax(b,d+1,false));
+   b[i]="";
+  }
+  return best;
+ }else{
+  let best=Infinity;
+  for(let i=0;i<9;i++)if(b[i]===""){
+   b[i]="X";
+   best=Math.min(best,minimax(b,d+1,true));
+   b[i]="";
+  }
+  return best;
+ }
+}
+
+function checkWinner(i){
+ return wins.some(w=>{
+  if(w.includes(i)&&w.every(j=>board[j]===currentPlayer)){
+   w.forEach(j=>cells[j].classList.add("win"));
+   return true;
+  }
+ });
+}
+
+function checkResult(){
+ for(let w of wins){
+  const[a,b,c]=w;
+  if(board[a]&&board[a]===board[b]&&board[a]===board[c])return board[a];
+ }
+ if(board.every(c=>c))return "tie";
+ return null;
+}
+
+function showMsg(t,w=""){
+ msg.textContent=t;
+ if(w==="player")tabuleiro.classList.add("player-win");
+ if(w==="mu")tabuleiro.classList.add("mu-win");
+ setTimeout(()=>{
+  tabuleiro.classList.remove("player-win","mu-win");
+  resetGame();
+ },1500);
+}
+
+function resetGame(){
+ board.fill("");
+ cells.forEach(c=>{c.textContent="";c.classList.remove("win");});
+ currentPlayer="X";
+ msg.textContent="";
+}
+
+function novoJogo(){
+ score={X:0,O:0,E:0};
+ ranking={player:0,mu:0};
+ save(); updatePlacar();
+ resetGame();
+}
+
+function save(){
+ localStorage.setItem("placar",JSON.stringify(score));
+ localStorage.setItem("ranking",JSON.stringify(ranking));
+}
+
+function updatePlacar(){
+ px.textContent=score.X;
+ po.textContent=score.O;
+ pe.textContent=score.E;
+}
+</script>
+</body>
+</html>
